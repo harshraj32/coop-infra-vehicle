@@ -57,8 +57,8 @@ project_root/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pointnet-registration.git
-cd pointnet-registration
+git clone https://github.com/harshraj32/coop-infra-vehicle.git
+cd coop-infra-vehicle
 ```
 
 2. Install dependencies:
@@ -68,17 +68,58 @@ pip install -r requirements.txt
 
 ## Dataset Preparation
 
-1. Prepare your dataset in the following structure:
+### 1. Download the Dataset
+The cooperative vehicle-infrastructure dataset can be downloaded from:
+- https://drive.google.com/file/d/1y8bGwI63TEBkDEh2JU_gdV7uidthSnoe/view
+
+### 2. Dataset Structure
+After downloading, change the name of the downloaded zip file example-cooperative-vehicle-infrastructure to cooperative-vehicle-infrastructure  and add it into the data folder structure as follows:
 ```
+
 data/
 └── cooperative-vehicle-infrastructure/
     ├── cooperative/
-    │   └── data_info_new.json
+    │   └── data_info_new.json     # Contains mapping between vehicle and infrastructure frames
     ├── vehicle-side/
+    │   ├── velodyne/              # Vehicle LiDAR point clouds
+    │   │   ├── 000000.pcd
+    │   │   ├── 000001.pcd
+    │   │   └── ...
+    │   └── calib/                 # Calibration files
     └── infrastructure-side/
+        ├── velodyne/              # Infrastructure LiDAR point clouds
+        │   ├── 000000.pcd
+        │   ├── 000001.pcd
+        │   └── ...
+        └── calib/                 # Calibration files
 ```
 
-2. Ensure your JSON file contains the correct paths to point cloud files and calibration information.
+
+### 4. JSON File Format
+The `data_info_new.json` file should contain entries in the following format:
+```json
+[
+    {
+        "vehicle_pointcloud_path": "vehicle-side/velodyne/000123.pcd",
+        "infrastructure_pointcloud_path": "infrastructure-side/velodyne/000456.pcd",
+        "calib_lidar_i2v_path": "cooperative/calib/000123.json"
+    },
+    ...
+]
+```
+
+### 5. Data Loading
+The dataset loader (`src/datasets/pointcloud_dataset.py`) will:
+- Read point clouds from both vehicle and infrastructure sides
+- Load calibration information
+- Sample a fixed number of points (configurable via `--num-points`)
+- Return synchronized pairs for training
+
+### Notes
+- Point clouds are in PCD format
+- Calibration files contain the ground truth transformations
+- All paths in the JSON file should be relative to the `cooperative-vehicle-infrastructure` directory
+- The dataset loader automatically handles point cloud sampling and normalization
 
 ## Running the Training Script
 

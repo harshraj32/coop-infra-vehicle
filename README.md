@@ -1,9 +1,30 @@
-# PointNet Registration Project
+# Cooperative Infrastructure-Vehicle Point Cloud Registration
 
-This project implements a point cloud registration framework using PointNet‐based models. Two variants of the PointNet architecture are provided:
+## Overview
+This project implements point cloud registration between infrastructure and vehicle sensors using PointNet-based architectures. The implementation is based on the [PointCloud_Regression](https://github.com/flatironinstitute/PointCloud_Regression) repository from Flatiron Institute, with several modifications and improvements to work with cooperative vehicle-infrastructure datasets.
 
-- **PointNet Vanilla:** The original PointNet architecture that uses a series of 1D convolutions followed by fully connected layers to predict 9 registration parameters (6 for rotation and 3 for translation).  
-- **PointNet CNN:** An alternative architecture that employs a dedicated CNN feature extractor (`PointFeatCNN`) before the fully connected layers. This variant can be selected via a command‑line argument.
+## Key Modifications
+
+### Architecture Changes
+- Added a new model variant `PointNetCNN` which incorporates a modified version of the `PointFeatCNN` module
+- Implemented two model options:
+  - `pointnet-vanilla`: Original PointNet architecture
+  - `pointnet-cnn`: Enhanced version with dedicated CNN feature extractor
+
+### Loss Functions
+- Implemented various loss functions from the original repository in `losses.py`
+- Experimented with different loss functions including:
+  - RMSD (Root Mean Square Deviation)
+  - ICP (Iterative Closest Point)
+  - RMSD + ICP
+  - Frobenius norm
+  - Chordal distance
+  - SVD-based loss
+- Found RMSD+ ICP loss to be most effective for our cooperative vehicle-infrastructure dataset
+
+### Dataset Handling
+- Modified the training pipeline to work with cooperative sensing data
+- Implemented custom data loading and preprocessing for infrastructure-vehicle point cloud pairs
 
 ## Project Structure
 
@@ -149,25 +170,72 @@ The training script:
    - Average Translation Error
    - Current Learning Rate
 
-## Additional Features
+## Optimization Strategy
 
-- **Automatic Device Selection:** Supports MPS (Mac), CUDA (NVIDIA), and CPU
-- **Model Checkpointing:** Automatically saves best model during training
-- **Flexible Loss Functions:** Implements RMSD, ICP, and combined losses
-- **Data Augmentation:** Random point sampling for point clouds
-- **Progress Monitoring:** Detailed training metrics printed each epoch
+### Optimizer Configuration
+- Implemented AdamW optimizer with the following parameters:
+  ```python
+  optimizer = optim.AdamW(model.parameters(),
+                         lr=lr,
+                         weight_decay=0.05,
+                         betas=(0.9, 0.999),
+                         eps=1e-8)
+  ```
+- Weight decay (0.05) helps prevent overfitting
+- Custom betas for better convergence on point cloud data
 
-## Troubleshooting
+### Learning Rate Scheduling
+Implemented a two-phase learning rate schedule:
 
-Common issues and solutions:
-1. "No module named 'src'": Ensure you're running from the project root directory
-2. CUDA out of memory: Reduce batch size or number of points
-3. NaN losses: Try reducing the learning rate or enabling batch normalization
+1. **Warm-up Phase**
+   ```python
+   warmup_epochs = 5
+   warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+       optimizer,
+       start_factor=0.1,
+       total_iters=warmup_epochs
+   )
+   ```
+   - Gradually increases learning rate for first 5 epochs
+   - Helps stabilize early training
 
-## License
+2. **Cosine Annealing**
+   ```python
+   scheduler = CosineAnnealingLR(
+       optimizer,
+       T_max=epochs,
+       eta_min=lr*0.1
+   )
+   ```
+   - Smoothly decreases learning rate after warm-up
+   - T_max set to total number of epochs
+   - Minimum learning rate set to 10% of initial lr
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+### Gradient Clipping
+- Implemented to prevent exploding gradients:
+  ```python
+  torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+  ```
+- Helps maintain stable training especially with point cloud data
 
-## Contributing
+### Training Loop Integration
+```python
+# During training
+if epoch < warmup_epochs:
+    warmup_scheduler.step()
+else:
+    scheduler.step()
+```
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+This optimization strategy was found to be particularly effective for:
+- Handling varying point cloud densities
+- Managing the complex geometry of infrastructure-vehicle registration
+- Stabilizing training with different loss functions
+- Improving convergence speed and final accuracy
+
+## Performance Notes
+- Warm-up phase helps prevent early training instability
+- Cosine annealing provides better final convergence compared to step scheduling
+- AdamW's weight decay particularly helpful for regularization
+- Gradient clipping essential for handling outliers in point cloud data
+
